@@ -1,0 +1,969 @@
+---
+title: "Econometrics Final Project"
+output: html_document
+authors: Sun Wo Kim, Leonardo Alcaide, Maria Camila Vargas
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load}
+#Load the Data
+load("/Users/jaydenkim/Desktop/Econometrics/acs2021_recoded.RData")
+
+# Load necessary libraries
+library(ggplot2)      # For data visualization
+library(tidyverse)    # For data manipulation
+library(haven)        # For working with imported datasets
+library(ggthemes)     # For advanced themes in ggplot
+library(standardize)  # For standardizing variables
+library(glmnet)  # For Lasso regression
+library(dplyr)    # For data manipulation
+library(scales)
+library(quantreg)
+```
+
+```{r Data Preparation}
+# Filter skilled and unskilled immigrant data based on education and citizenship status
+# Define unskilled immigrants
+unskilled_imgra <- acs2021 %>%
+  filter((CITIZEN == 1 | CITIZEN == 2 | CITIZEN == 3) &
+         (EDUCD %in% c("Regular high school diploma", "Grade 6", "Grade 7", "Grade 8",
+                       "Grade 9", "Grade 10", "Grade 11", "Grade 12",
+                       "GED or alternative credential")))
+# Define skilled immigrants
+skilled_imgra <- acs2021 %>%
+  filter((CITIZEN == 1 | CITIZEN == 2 | CITIZEN == 3) &
+         (EDUCD %in% c("Some college, but less than 1 year",
+                       "Associate's degree, type not specified",
+                       "Bachelor's degree", "Master's degree", "Doctoral degree")))
+
+```
+
+#Means (Simple Graphs, Correlations, Differences of Means)
+```{r Figure 1 - All Immigrants by Citizenship and Education}
+ggplot(data = acs2021, aes(x = CITIZEN, fill = EDUCD)) +
+  geom_bar() +
+  labs(
+    title = "Distribution of Education\nby Citizenship",  # Line break added for better visibility
+    x = "Citizenship Status",
+    y = "Count",
+    fill = "Education Level"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "right",  # Place the legend on the right
+    legend.title = element_text(size = 10),  # Adjust legend title size
+    legend.text = element_text(size = 8),  # Adjust legend item size
+    axis.text.x = element_text(size = 10),  # Keep x-axis labels straight
+    axis.text.y = element_text(size = 10),  # Format y-axis labels
+    axis.title.x = element_text(size = 12, face = "bold"),  # X-axis title styling
+    axis.title.y = element_text(size = 12, face = "bold"),  # Y-axis title styling
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(t = 10, b = 10))  # Center the title and add space
+  ) +
+  scale_y_continuous(labels = scales::comma)
+```
+
+```{r Figure 2 - Skilled Immigrants by Citizenship and Education}
+ggplot(data = skilled_imgra, aes(x = EDUCD, fill = EDUCD)) +
+  geom_bar(color = "black", width = 0.7) +  # Add black borders and adjust bar width
+  geom_text(
+    stat = "count", aes(label = after_stat(count)),  # Use after_stat(count) for counts
+    vjust = -0.5, size = 3.5, fontface = "bold", color = "black"  # Position and style the text
+  ) +
+  scale_fill_brewer(palette = "Set2") +  # Use a professional color palette
+  labs(
+    title = "Education Distribution of Skilled Immigrants",
+    x = "Education Level",
+    y = "Number of Individuals",  # Updated y-axis label
+    fill = "Education Level"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.margin = margin(t = 10, r = 30, b = 10, l = 60),  # Double the left margin for more rightward shift
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "bold"),  # Slant and adjust x-axis labels
+    axis.text.y = element_text(size = 10),  # Resize y-axis labels
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Center and bold the title
+    legend.position = "right",  # Keep legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9),  # Resize legend text
+    legend.key.size = unit(0.8, "cm"),  # Adjust legend key size
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.5)  # Use linewidth for horizontal grid lines
+  ) +
+  coord_cartesian(clip = "off")  # Prevent clipping of text above the bars
+```
+
+```{r Figure 3 - Unskilled Immigrants by Citizenship and Education}
+# Order education levels logically
+unskilled_imgra$EDUCD <- factor(
+  unskilled_imgra$EDUCD,
+  levels = c(
+    "Grade 6", "Grade 7", "Grade 8", "Grade 9",
+    "Grade 10", "Grade 11", "Grade 12", "GED or alternative credential",
+    "Regular high school diploma"
+  )
+)
+
+# Create the improved bar plot with the legend included
+ggplot(data = unskilled_imgra, aes(x = EDUCD, fill = EDUCD)) +
+  geom_bar(color = "black", width = 0.7) +  # Add black borders and adjust bar width
+  geom_text(
+    stat = "count", aes(label = after_stat(count)),  # Use updated ggplot2 syntax for count
+    vjust = -0.5, size = 3.5, fontface = "bold", color = "black"  # Bold text above the bars
+  ) +
+  scale_fill_manual(
+    values = c(
+      "#FF7F0E", "#2CA02C", "#1F77B4", "#D62728", "#9467BD", "#8C564B",
+      "#E377C2", "#7F7F7F", "#BCBD22"
+    ),  # Brighter, vivid custom colors
+    name = "Education Level"  # Add legend title
+  ) +
+  labs(
+    title = "Education Distribution of Unskilled Immigrants",
+    x = "Education Level",
+    y = "Number of Individuals"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10, face = "bold"),  # Rotate, resize, and bold x-axis labels
+    axis.text.y = element_text(size = 10),  # Resize y-axis labels
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Center-align title and increase size
+    legend.position = "right",  # Place legend on the right side
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9),  # Resize legend text
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.5),  # Subtle horizontal grid lines
+    plot.background = element_rect(fill = "white", color = NA),  # Clean white background
+    panel.background = element_rect(fill = "white", color = NA)  # Match panel background with plot
+  ) +
+  coord_cartesian(clip = "off")  # Ensure labels are not clipped
+```
+
+```{r Figure 4 - Comparison: Skilled vs. Unskilled Immigrants}
+combined_data <- bind_rows(
+  unskilled_imgra %>% mutate(Group = "Unskilled Immigrants"),
+  skilled_imgra %>% mutate(Group = "Skilled Immigrants")
+)
+
+ggplot(data = combined_data, aes(x = EDUCD, fill = Group)) +
+  geom_bar(position = "stack", color = "black", width = 0.8) +  # Stacked bars with border
+  geom_text(
+    stat = "count",
+    aes(label = ..count..),
+    size = 3.5,  # Adjust the size of the text
+    color = "black",
+    vjust = -0.5  # Position the text above the bars
+  ) +
+  scale_fill_manual(
+    values = c("Skilled Immigrants" = "#1b9e77", "Unskilled Immigrants" = "#d95f02")  # Custom colors
+  ) +
+  scale_y_continuous(
+    labels = scales::comma,  # Format y-axis as numbers with commas
+    limits = c(0, 90000)  # Set the y-axis range to 0-90,000
+  ) +
+  labs(
+    title = "Education Level Distribution: Skilled vs Unskilled Immigrants",
+    x = "Education Level",
+    y = "Number of Individuals",
+    fill = "Immigrant Group"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "right",
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    plot.margin = margin(t = 50, r = 20, b = 20, l = 20)  # Add more padding at the top (t = 50)
+  )
+```
+
+```{r Figure 5 -  Unskilled Immigrants in Key Industries: }
+# Filter for unskilled immigrants in key industries
+Industry <- unskilled_imgra %>%
+  filter(IND %in% c("Supermarkets and other grocery (except convenience) stores",
+                    "Restaurants and other food services",
+                    "Construction",
+                    "Crop production",
+                    "U.S. Army"))
+
+# Bar plot for unskilled immigrants by industry and education
+ggplot(data = Industry, mapping = aes(x = IND, fill = EDUCD)) +
+  geom_bar() +
+  labs(
+    title = "Unskilled Immigrants in Key Industries\nby Education Level",  # Add line break for clarity
+    x = "Industry",
+    y = "Count",
+    fill = "Education Level"
+  ) +
+  theme_minimal() +  # Apply a clean white background
+  theme(
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    plot.title = element_text(
+      size = 16,
+      face = "bold",
+      hjust = 0.3,  # Move the title further to the left
+      margin = margin(t = 10, b = 10)  # Add spacing above and below the title
+    ),
+    legend.title = element_text(size = 10),  # Adjust legend title size
+    legend.text = element_text(size = 9)  # Adjust legend text size
+  ) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 20))  # Wrap long x-axis labels
+
+```
+
+```{r Figure 6 -  Income Comparison Between Skilled and Unskilled Immigrants}
+skilled_levels <- c("Bachelor's degree", "Master's degree", "Doctoral degree")
+unskilled_levels <- c("Regular high school diploma", "Grade 12", "GED or alternative credential")
+# Ensure INCWAGE is numeric
+acs2021$INCWAGE <- as.numeric(acs2021$INCWAGE)
+# Add a new column to classify skilled and unskilled
+acs2021$ImmigrantType <- ifelse(acs2021$EDUCD %in% skilled_levels, "Skilled", "Unskilled")
+# Create the violin plot
+ggplot(data = acs2021, aes(x = ImmigrantType, y = INCWAGE, fill = ImmigrantType)) +
+  geom_violin(trim = FALSE, alpha = 0.7, color = "black") +  # Add violin plot with transparency
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Income Distribution Between Skilled and Unskilled Immigrants",
+    x = "Immigrant Type",
+    y = "Income (Wages in Dollars)",
+    fill = "Immigrant Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Center and bold title
+    axis.text.x = element_text(size = 12, face = "bold"),  # Customize x-axis labels
+    axis.text.y = element_text(size = 12),  # Customize y-axis labels
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    legend.position = "none"  # Remove legend if the fill is redundant
+  )
+```
+
+```{r Figure 7 - Age Distribution of Immigrants by Citizenship Status}
+# Calculate summary statistics for annotation
+summary_stats <- acs2021 %>%
+  group_by(CITIZEN) %>%
+  summarise(
+    Q1 = quantile(AGE, 0.25, na.rm = TRUE),
+    Median = median(AGE, na.rm = TRUE),
+    Q3 = quantile(AGE, 0.75, na.rm = TRUE)
+  )
+
+# Age distribution of immigrants by citizenship with numbers on the graph
+ggplot(data = acs2021, aes(x = as.factor(CITIZEN), y = AGE)) +
+  geom_boxplot(outlier.alpha = 0.5, fill = "lightgreen") +
+  geom_text(
+    data = summary_stats,
+    aes(x = as.factor(CITIZEN), y = Q1, label = paste0("Q1: ", round(Q1))),
+    vjust = -1.5, color = "blue", size = 3.5, fontface = "bold"
+  ) +
+  geom_text(
+    data = summary_stats,
+    aes(x = as.factor(CITIZEN), y = Median, label = paste0("Median: ", round(Median))),
+    vjust = -1.5, color = "red", size = 3.5, fontface = "bold"
+  ) +
+  geom_text(
+    data = summary_stats,
+    aes(x = as.factor(CITIZEN), y = Q3, label = paste0("Q3: ", round(Q3))),
+    vjust = -1.5, color = "green", size = 3.5, fontface = "bold"
+  ) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Age Distribution of Immigrants by Citizenship Status",
+    x = "Citizenship Status",
+    y = "Age"
+  ) +
+  theme_minimal()
+```
+
+```{r Figure 8 - Immigrants from North America:}
+# Filter for North American immigrants
+North_American <- acs2021 %>% 
+  filter(BPL %in% c("Canada", "Mexico")) 
+
+# Create the bar plot with improved aesthetics and numbers on the bars
+ggplot(data = North_American, mapping = aes(x = BPL, fill = BPL)) +
+  geom_bar(color = "black", width = 0.7) +  # Add border and adjust bar width
+  geom_text(
+    stat = "count", 
+    aes(label = after_stat(count)),  # Add count labels above the bars
+    vjust = -0.5, size = 5, fontface = "bold", color = "black"  # Adjust text position and style
+  ) +
+  scale_fill_manual(
+    values = c("Canada" = "#1f77b4", "Mexico" = "#ff7f0e"),  # Custom color palette
+    name = "Country of Origin"  # Add legend title
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Immigrants from North America",  # Proper title capitalization
+    x = "Country of Origin", 
+    y = "Number of Immigrants"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(b = 10)),  # Center title
+    axis.text.x = element_text(size = 12, face = "bold"),  # Format x-axis labels
+    axis.text.y = element_text(size = 10),  # Format y-axis labels
+    axis.title.x = element_text(size = 14, face = "bold"),  # Style x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Style y-axis title
+    legend.position = "right",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9),  # Adjust legend text size
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.5)  # Subtle horizontal grid lines
+  ) +
+  coord_cartesian(clip = "off")  # Prevent clipping of text above the bars
+```
+
+```{r Figure 9 -  Immigrants from South America}
+# Filter for South American immigrants
+South_American <- acs2021 %>% 
+  filter(BPL == "SOUTH AMERICA")
+
+# Create the bar plot with improved aesthetics and numbers on the graph
+ggplot(data = South_American, mapping = aes(x = BPL, fill = BPL)) +
+  geom_bar(color = "black", width = 0.7) +  # Add border and adjust bar width
+  geom_text(
+    stat = "count", 
+    aes(label = after_stat(count)),  # Add count labels above the bars
+    vjust = -0.5, size = 5, fontface = "bold", color = "black"  # Adjust text position and style
+  ) +
+  scale_fill_manual(
+    values = c("SOUTH AMERICA" = "#2ca25f"),  # Custom color for South America
+    name = "Continent of Origin"  # Add legend title
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Immigrants from South America",  # Proper title capitalization
+    x = "Country of Origin", 
+    y = "Number of Immigrants"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(b = 10)),  # Center title
+    axis.text.x = element_text(size = 12, face = "bold"),  # Format x-axis labels
+    axis.text.y = element_text(size = 10),  # Format y-axis labels
+    axis.title.x = element_text(size = 14, face = "bold"),  # Style x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Style y-axis title
+    legend.position = "right",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9),  # Adjust legend text size
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.5)  # Subtle horizontal grid lines
+  ) +
+  coord_cartesian(clip = "off")  # Prevent clipping of text above the bars
+```
+
+```{r Figure 10 - Immigrants from Oceania}
+# Filter for Oceania immigrants
+Oceania <- acs2021 %>% 
+  filter(BPL == "Australia and New Zealand")
+
+# Create the bar plot with enhanced aesthetics
+ggplot(data = Oceania, mapping = aes(x = BPL, fill = BPL)) +
+  geom_bar(color = "black", width = 0.7) +  # Add border and adjust bar width
+  geom_text(
+    stat = "count", 
+    aes(label = after_stat(count)),  # Add count labels above the bars
+    vjust = -0.5, size = 4, fontface = "bold", color = "black"  # Customize label size and style
+  ) +
+  scale_fill_manual(
+    values = c("Australia and New Zealand" = "#1f77b4"),  # Custom color for Oceania
+    name = "Country of Origin"  # Add legend title
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Immigrants from Oceania",  # Proper title capitalization
+    x = "Country of Origin", 
+    y = "Number of Immigrants"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(b = 10)),  # Centered title
+    axis.text.x = element_text(size = 12, face = "bold"),  # Resize x-axis labels
+    axis.text.y = element_text(size = 10),  # Resize y-axis labels
+    axis.title.x = element_text(size = 12, face = "bold"),  # Style x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Style y-axis title
+    legend.position = "right",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Style legend title
+    legend.text = element_text(size = 9),  # Adjust legend text size
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.5)  # Subtle horizontal grid lines
+  ) +
+  coord_cartesian(clip = "off")  # Prevent clipping of text above the bars
+
+```
+
+```{r Figure 11 - Immigrants from Africa: Additional geographic breakdown}
+# Filter for African immigrants
+Africa <- acs2021 %>% 
+  filter(BPL == "AFRICA")
+
+# Create the bar plot with improved aesthetics and numbers
+ggplot(data = Africa, mapping = aes(x = BPL, fill = BPL)) +
+  geom_bar(color = "black", width = 0.7) +  # Add border and adjust bar width
+  geom_text(
+    stat = "count", 
+    aes(label = after_stat(count)),  # Add count labels above the bars
+    vjust = -0.5, size = 5, fontface = "bold", color = "black"  # Adjust text position and style
+  ) +
+  scale_fill_manual(
+    values = c("AFRICA" = "#6baed6"),  # Custom color for Africa
+    name = "Continent of Origin"  # Add legend title
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Immigrants from Africa",  # Proper title capitalization
+    x = "Country of Origin", 
+    y = "Number of Immigrants"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(b = 10)),  # Center title
+    axis.text.x = element_text(size = 12, face = "bold"),  # Format x-axis labels
+    axis.text.y = element_text(size = 10),  # Format y-axis labels
+    axis.title.x = element_text(size = 14, face = "bold"),  # Style x-axis title
+    axis.title.y = element_text(size = 14, face = "bold"),  # Style y-axis title
+    legend.position = "right",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9),  # Adjust legend text size
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.5)  # Subtle horizontal grid lines
+  ) +
+  coord_cartesian(clip = "off")  # Prevent clipping of text above the bars
+
+```
+
+```{r Figure 12 - Immigrants from Europe}
+# Filter for European immigrants
+Europe <- acs2021 %>% 
+  filter(BPL %in% c(
+    "England", "France", "Germany", "Belgium", "Italy", "Spain", "Portugal",
+    "Denmark", "Sweden", "Norway", "Finland", "Poland", "Greece", 
+    "Switzerland", "Netherlands", "Austria", "Bulgaria", "Czechoslovakia", 
+    "Hungary", "Romania", "Yugoslavia", "Central Europe, ns", "Estonia", 
+    "Latvia", "Baltic States"
+  ))
+
+# Create the bar plot with reduced aesthetics
+ggplot(data = Europe, mapping = aes(x = reorder(BPL, -table(BPL)[BPL]), fill = BPL)) +
+  geom_bar(color = "black", width = 0.7) +  # Add border and adjust bar width
+  geom_text(
+    stat = "count", 
+    aes(label = after_stat(count)),  # Add count labels above the bars
+    vjust = -0.5, size = 2.5, fontface = "bold", color = "black"  # Reduce text size
+  ) +
+  scale_fill_manual(
+    values = scales::hue_pal()(length(unique(Europe$BPL))),  # Assign unique colors to countries
+    name = "Country of Origin"  # Add legend title
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Immigrants from Europe",  # Proper title capitalization
+    x = "Country of Origin", 
+    y = "Number of Immigrants"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.5, margin = margin(b = 10)),  # Smaller title
+    axis.text.x = element_text(size = 8, angle = 45, hjust = 1),  # Reduce and rotate x-axis labels
+    axis.text.y = element_text(size = 8),  # Reduce y-axis labels
+    axis.title.x = element_text(size = 10, face = "bold"),  # Smaller x-axis title
+    axis.title.y = element_text(size = 10, face = "bold"),  # Smaller y-axis title
+    legend.position = "bottom",  # Place legend on the right
+    legend.title = element_text(size = 8, face = "bold"),  # Smaller legend title
+    legend.text = element_text(size = 7),  # Smaller legend text
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.3)  # Subtle horizontal grid lines
+  ) +
+  coord_cartesian(clip = "off")  # Prevent clipping of text above the bars
+
+```
+
+```{r Figure 13 - Immigrants from Asia}
+# Filter for Asian immigrants
+Asia <- acs2021 %>% 
+  filter(BPL %in% c(
+    "China", "Japan", "Korea", "India", "Thailand", "Turkey", "Brunei", "Cambodia", 
+    "Indonesia", "Laos", "Malaysia", "Philippines", "Singapore", "Vietnam", 
+    "Afghanistan", "Iran", "Maldives", "Nepal", "Bahrain", "Cyprus", "Iraq", 
+    "Israel/Palestine", "Jordan", "Kuwait", "Lebanon", "Oman", "Qatar", 
+    "Yemen", "Syria", "United Arab Emirates", "Saudi Arabia"
+  ))
+
+# Create the bar plot with enhanced aesthetics
+ggplot(data = Asia, mapping = aes(x = reorder(BPL, -table(BPL)[BPL]), fill = BPL)) +
+  geom_bar(color = "black", width = 0.7) +  # Add border and adjust bar width
+  geom_text(
+    stat = "count", 
+    aes(label = after_stat(count)),  # Add count labels above the bars
+    vjust = -0.5, size = 3, fontface = "bold", color = "black"  # Customize label size and style
+  ) +
+  scale_fill_manual(
+    values = scales::hue_pal()(length(unique(Asia$BPL))),  # Unique colors for each country
+    name = "Country of Origin"  # Add legend title
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Immigrants from Asia",  # Proper title capitalization
+    x = "Country of Origin", 
+    y = "Number of Immigrants"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(b = 10)),  # Centered title
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),  # Rotate and resize x-axis labels
+    axis.text.y = element_text(size = 10),  # Resize y-axis labels
+    axis.title.x = element_text(size = 12, face = "bold"),  # Style x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Style y-axis title
+    legend.position = "bottom",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Style legend title
+    legend.text = element_text(size = 9),  # Adjust legend text size
+    panel.grid.major.x = element_blank(),  # Remove vertical grid lines
+    panel.grid.major.y = element_line(color = "gray80", linewidth = 0.5)  # Subtle horizontal grid lines
+  ) +
+  coord_cartesian(clip = "off")  # Prevent clipping of text above the bars
+
+```
+
+#Simple Regressions
+```{r Figure 14 - Unskilled Immigrants}
+# Ensure INCWAGE is numeric
+unskilled_imgra$INCWAGE <- as.numeric(unskilled_imgra$INCWAGE)
+
+# Create a violin plot to visualize wage distribution by citizenship status
+ggplot(data = unskilled_imgra, aes(x = as.factor(CITIZEN), y = INCWAGE, fill = as.factor(CITIZEN))) +
+  geom_violin(alpha = 0.7, trim = FALSE) +  # Violin plot to show distribution
+  stat_summary(
+    fun = median, geom = "point", size = 3, color = "black", shape = 4  # Add median as a point
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers with commas
+  labs(
+    title = "Wage Distribution by Citizenship Status for Unskilled Immigrants",
+    x = "Citizenship Status",
+    y = "Wages (in dollars)",
+    fill = "Citizenship"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Centered and bold title
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    legend.position = "right",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9)  # Resize legend text
+  )
+
+# Fit the OLS model
+ols_model <- lm(INCWAGE ~ CITIZEN + EDUCD, data = unskilled_imgra)
+# Display the OLS model output
+summary(ols_model)
+```
+
+```{r Figure 15 - Skilled Immigrants}
+# Visualize the relationship between Citizenship and Wages using a Violin Plot
+ggplot(data = skilled_imgra, aes(x = as.factor(CITIZEN), y = INCWAGE, fill = as.factor(CITIZEN))) +
+  geom_violin(alpha = 0.7, trim = FALSE) +  # Violin plot to show distribution
+  stat_summary(
+    fun = median, geom = "point", size = 3, color = "black", shape = 4  # Add median as a point
+  ) +
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis as numbers
+  labs(
+    title = "Wage Distribution by Citizenship Status for Skilled Immigrants",
+    x = "Citizenship Status",
+    y = "Wages (in dollars)",
+    fill = "Citizenship"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Centered and bold title
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    legend.position = "right"  # Place legend on the right
+  )
+
+# Fit the OLS model
+ols_model <- lm(INCWAGE ~ CITIZEN + EDUCD, data = unskilled_imgra)
+# Display the OLS model output
+summary(ols_model)
+```
+
+```{r Figure 16 - Linear Regression for Unskilled Immigrants}
+# Linear regression for unskilled immigrants
+model_1 <- lm(INCWAGE ~ AGE + CITIZEN + EDUCD + RACE + BPL, data = unskilled_imgra)
+summary(model_1)
+
+# Visualization of wages by citizenship type
+ggplot(data = unskilled_imgra, aes(x = INCWAGE, y = as.factor(CITIZEN), fill = as.factor(CITIZEN))) +
+  geom_violin(alpha = 0.7, trim = FALSE) +  # Violin plot for wage distribution
+  stat_summary(
+    fun = median, geom = "point", size = 3, color = "black", shape = 4  # Add median points
+  ) +
+  scale_x_continuous(labels = scales::comma) +  # Format x-axis labels as numbers with commas
+  scale_fill_brewer(palette = "Set3") +  # Use a clean color palette
+  labs(
+    title = "Wages of Unskilled Immigrants by Citizenship Type",
+    x = "Nominal Wages (USD)",
+    y = "Citizenship Type",
+    fill = "Citizenship"
+  ) +
+  theme_minimal() +  # Minimalist theme for clean presentation
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(t = 10, b = 10)),  # Centered title
+    axis.text.x = element_text(size = 10),  # Customize x-axis text size
+    axis.text.y = element_text(size = 10),  # Customize y-axis text size
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    legend.position = "right",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9)  # Adjust legend text size
+  )
+```
+
+```{r Figure 17 -  Linear Regression for Skilled Immigrants}
+# Linear regression for skilled immigrants
+model_2 <- lm(INCWAGE ~ AGE + CITIZEN + EDUCD + RACE + BPL, data = skilled_imgra)
+summary(model_2)
+
+# Visualization of wages by citizenship type
+ggplot(data = skilled_imgra, aes(x = INCWAGE, y = as.factor(CITIZEN), fill = as.factor(CITIZEN))) +
+  geom_violin(alpha = 0.7, trim = FALSE) +  # Violin plot for wage distribution
+  stat_summary(
+    fun = median, geom = "point", size = 3, color = "black", shape = 4  # Add median points
+  ) +
+  scale_x_continuous(labels = scales::comma) +  # Format x-axis labels as numbers with commas
+  scale_fill_brewer(palette = "Set3") +  # Use a clean color palette
+  labs(
+    title = "Wages of Skilled Immigrants by Citizenship Type",
+    x = "Nominal Wages (USD)",
+    y = "Citizenship Type",
+    fill = "Citizenship"
+  ) +
+  theme_minimal() +  # Minimalist theme for clean presentation
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5, margin = margin(t = 10, b = 10)),  # Centered title
+    axis.text.x = element_text(size = 10),  # Customize x-axis text size
+    axis.text.y = element_text(size = 10),  # Customize y-axis text size
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold"),  # Bold y-axis title
+    legend.position = "right",  # Place legend on the right
+    legend.title = element_text(size = 10, face = "bold"),  # Bold legend title
+    legend.text = element_text(size = 9)  # Adjust legend text size
+  )
+```
+
+```{r Figure 18 - Predictions for Unskilled Immigrants}
+# Predict income for unskilled immigrants using OLS model
+ols_1 <- lm(INCWAGE ~ AGE + CITIZEN + EDUCD + OCC + IND, data = unskilled_imgra)
+pred_vals_ols1 <- predict(ols_1, unskilled_imgra)
+
+# Add predicted income values to the dataset
+unskilled_imgra$Predicted_INC <- pred_vals_ols1
+
+# Scatter plot of actual vs predicted income
+ggplot(unskilled_imgra, aes(x = INCWAGE, y = Predicted_INC)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  scale_x_continuous(labels = scales::comma) +  # Format x-axis values as numbers with commas
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis values as numbers with commas
+  labs(
+    title = "Actual vs Predicted Income for Unskilled Immigrants",
+    x = "Actual Income",
+    y = "Predicted Income"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Center and bold title
+    axis.text.x = element_text(size = 10),  # Customize x-axis text size
+    axis.text.y = element_text(size = 10),  # Customize y-axis text size
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold")   # Bold y-axis title
+  )
+
+# Fit the OLS model
+ols_model <- lm(INCWAGE ~ CITIZEN + EDUCD, data = unskilled_imgra)
+# Display the OLS model output
+summary(ols_model)
+```
+
+```{r Figure 19 - Predictions for Skilled Immigrants}
+# Ensure 'CITIZEN' is a factor before fitting the model
+skilled_imgra$CITIZEN <- as.factor(skilled_imgra$CITIZEN)
+
+# Re-fit the OLS model with the corrected CITIZEN variable
+ols_2 <- lm(INCWAGE ~ AGE + CITIZEN + EDUCD + OCC + IND, data = skilled_imgra)
+
+# Predict income for skilled immigrants
+pred_vals_ols2 <- predict(ols_2, skilled_imgra)
+
+# Add predicted income values to the dataset
+skilled_imgra$Predicted_INC <- pred_vals_ols2
+
+# Scatter plot of actual vs predicted income
+ggplot(skilled_imgra, aes(x = INCWAGE, y = Predicted_INC)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  scale_x_continuous(labels = scales::comma) +  # Format x-axis values as numbers with commas
+  scale_y_continuous(labels = scales::comma) +  # Format y-axis values as numbers with commas
+  labs(
+    title = "Actual vs Predicted Income for Skilled Immigrants",
+    x = "Actual Income",
+    y = "Predicted Income"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),  # Center and bold title
+    axis.text.x = element_text(size = 10),  # Customize x-axis text size
+    axis.text.y = element_text(size = 10),  # Customize y-axis text size
+    axis.title.x = element_text(size = 12, face = "bold"),  # Bold x-axis title
+    axis.title.y = element_text(size = 12, face = "bold")   # Bold y-axis title
+  )
+
+# Display the summary of the OLS model
+summary(ols_2)
+
+```
+
+```{r Figure 20 - Impact of Age and Education on Wages}
+# Create the plot
+ggplot(data = acs2021, aes(x = AGE, y = INCWAGE, color = EDUCD)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Impact of Age and Education on Wages",
+       x = "Age", y = "Income (Wages in Dollars)") +
+  theme_minimal()
+```
+
+#Complicated Regressions
+```{r Figure 21 -  Prediction Accuracy Analysis (Confusion Matrix)}
+# Step 1: Ensure INCWAGE is numeric and remove missing values
+skilled_imgra$INCWAGE <- as.numeric(skilled_imgra$INCWAGE)
+skilled_imgra <- skilled_imgra %>% filter(!is.na(INCWAGE))
+
+# Step 2: Fit the OLS model for skilled immigrants
+ols_skilled <- lm(INCWAGE ~ AGE + CITIZEN + EDUCD + OCC, data = skilled_imgra)
+
+# Step 3: Generate predictions
+predicted_skilled <- predict(ols_skilled, skilled_imgra)
+
+# Step 4: Create binary predictions based on the mean threshold
+predicted_binary <- as.factor(ifelse(predicted_skilled > mean(predicted_skilled, na.rm = TRUE), 1, 0))
+
+# Step 5: Generate the confusion matrix
+actual_binary <- as.factor(ifelse(skilled_imgra$INCWAGE > mean(skilled_imgra$INCWAGE, na.rm = TRUE), 1, 0))
+conf_matrix <- table(Predicted = predicted_binary, Actual = actual_binary)
+
+# Step 6: Check the structure of the confusion matrix
+print("Confusion Matrix:")
+print(conf_matrix)
+
+# Step 7: Convert the confusion matrix into a dataframe for visualization
+conf_df <- as.data.frame(as.table(conf_matrix))
+
+# Rename columns for clarity
+if (ncol(conf_df) == 3) {
+  colnames(conf_df) <- c("Prediction", "Actual", "Count")
+} else {
+  stop("Unexpected structure of the confusion matrix. Please inspect `conf_matrix`.")
+}
+
+# Step 8: Plot the confusion matrix
+ggplot(data = conf_df, aes(x = Prediction, y = Actual, fill = Count)) +
+  geom_tile(color = "white") +  # Create the heatmap tiles
+  geom_text(aes(label = Count), color = "black", size = 4) +  # Add count labels
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +  # Gradient fill for the tiles
+  labs(
+    title = "Prediction Accuracy for Skilled Immigrants",
+    x = "Predicted Income Level",
+    y = "Actual Income Level"
+  ) +
+  theme_minimal()  # Use a clean and minimalistic theme
+```
+
+```{r Figure 22 - Quantile Regression Coefficients}
+# Step 1: Define the dependent variable and independent variables
+y <- as.numeric(skilled_imgra$INCWAGE)  # Target variable: income
+x <- skilled_imgra[, c("AGE", "EDUC", "CITIZEN", "RACE", "BPL")]  # Predictors
+
+# Step 2: Handle missing values
+if (any(is.na(x)) | any(is.na(y))) {
+  print("Missing values detected. Removing rows with NA values.")
+  skilled_imgra <- na.omit(skilled_imgra)  # Remove rows with missing data
+  x <- skilled_imgra[, c("AGE", "EDUC", "CITIZEN", "RACE", "BPL")]
+  y <- as.numeric(skilled_imgra$INCWAGE)
+}
+
+# Step 3: Convert categorical variables to factors
+x$CITIZEN <- as.factor(x$CITIZEN)
+x$RACE <- as.factor(x$RACE)
+x$BPL <- as.factor(x$BPL)
+
+# Step 4: Fit quantile regression models for different quantiles
+qreg_25 <- rq(INCWAGE ~ AGE + EDUC + CITIZEN + RACE + BPL, tau = 0.25, data = skilled_imgra)
+qreg_50 <- rq(INCWAGE ~ AGE + EDUC + CITIZEN + RACE + BPL, tau = 0.50, data = skilled_imgra)
+qreg_75 <- rq(INCWAGE ~ AGE + EDUC + CITIZEN + RACE + BPL, tau = 0.75, data = skilled_imgra)
+
+# Step 5: Extract coefficients from quantile regression results
+extract_coefficients <- function(qreg_model, quantile_label) {
+  coef_matrix <- as.data.frame(summary(qreg_model)$coefficients)
+  coef_matrix$Quantile <- quantile_label
+  coef_matrix$Predictor <- rownames(coef_matrix)
+  rownames(coef_matrix) <- NULL
+  colnames(coef_matrix) <- c("Coefficient", "StdError", "tValue", "Quantile", "Predictor")
+  return(coef_matrix)
+}
+
+coefficients_25 <- extract_coefficients(qreg_25, "25th Percentile")
+coefficients_50 <- extract_coefficients(qreg_50, "Median (50th Percentile)")
+coefficients_75 <- extract_coefficients(qreg_75, "75th Percentile")
+
+# Step 6: Combine results into a single dataframe
+coefficients_df <- bind_rows(coefficients_25, coefficients_50, coefficients_75) %>%
+  filter(Predictor != "(Intercept)")  # Exclude intercept for plotting
+
+# Step 7: Plot the quantile regression coefficients
+ggplot(coefficients_df, aes(x = Predictor, y = Coefficient, color = Quantile, group = Quantile)) +
+  geom_point(size = 4) +
+  geom_line() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    title = "Quantile Regression: Effects of Predictors on Income",
+    x = "Predictors",
+    y = "Coefficient Value",
+    color = "Quantile"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.text.x = element_text(size = 12, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 14, face = "bold"),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+```
+
+```{r Figure 24 - Lasso Cross-Validation Results}
+# Step 1: Ensure the dependent variable is numeric
+y <- as.numeric(skilled_imgra$INCWAGE)  # Target variable: income
+
+# Step 2: Convert categorical variables to factors (if not already)
+skilled_imgra$RACE <- as.factor(skilled_imgra$RACE)
+skilled_imgra$BPL <- as.factor(skilled_imgra$BPL)
+skilled_imgra$CITIZEN <- as.factor(skilled_imgra$CITIZEN)
+
+# Step 3: Select independent variables
+x <- skilled_imgra[, c('AGE', 'EDUC', 'RACE', 'BPL', 'CITIZEN')]
+
+# Step 4: Handle missing data
+if (any(is.na(x)) | any(is.na(y))) {
+  print("Missing values detected. Removing rows with NA values.")
+  skilled_imgra <- na.omit(skilled_imgra)  # Remove rows with missing data
+  x <- skilled_imgra[, c('AGE', 'EDUC', 'RACE', 'BPL', 'CITIZEN')]  # Update x
+  y <- as.numeric(skilled_imgra$INCWAGE)  # Update y
+}
+
+# Step 5: Convert categorical variables to dummy variables
+x_matrix <- model.matrix(~ ., data = x)[, -1]  # Create dummy variables and remove the intercept
+
+# Step 6: Fit the Lasso model using cross-validation
+set.seed(42)  # Ensure reproducibility
+cv_model <- cv.glmnet(x_matrix, y, alpha = 1, standardize = TRUE)  # Lasso regression with cross-validation
+
+# Step 7: Extract data for cross-validation plot
+cv_data <- data.frame(
+  log_lambda = log(cv_model$lambda),
+  mean_mse = cv_model$cvm,
+  lower = cv_model$cvlo,
+  upper = cv_model$cvup
+)
+
+# Step 8: Create custom cross-validation plot
+ggplot(cv_data, aes(x = log_lambda, y = mean_mse)) +
+  geom_line(color = "blue", size = 1) +  # Mean squared error line
+  geom_point(size = 2, color = "red") +  # Points for each lambda value
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "gray") +  # Error bars
+  labs(
+    title = "Cross-Validation Results for Lasso Regression",
+    x = "Log(Lambda)",
+    y = "Mean Squared Error"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Centered and bold title
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 10),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold")
+  ) +
+  scale_y_continuous(labels = scales::comma)  # Format y-axis values as numbers
+
+# Fit the OLS model
+ols_model <- lm(INCWAGE ~ CITIZEN + EDUCD, data = unskilled_imgra)
+# Display the OLS model output
+summary(ols_model)
+```
+
+```{r Figure 23 - Lasso Regression Coefficients}
+# Step 8: Get the best lambda from cross-validation
+best_lambda <- cv_model$lambda.min
+cat("Best lambda from cross-validation:", best_lambda, "\n")
+# Step 9: Refit the Lasso model with the best lambda
+lasso_model <- glmnet(x_matrix, y, alpha = 1, lambda = best_lambda)
+# Extract coefficients
+lasso_coefs <- coef(lasso_model)
+print("Lasso Regression Coefficients:")
+print(lasso_coefs)
+# Step 10: Visualize non-zero coefficients
+lasso_df <- as.data.frame(as.matrix(lasso_coefs))
+lasso_df$Variable <- rownames(lasso_df)
+colnames(lasso_df) <- c("Coefficient", "Variable")
+# Filter non-zero coefficients for visualization
+lasso_df <- lasso_df %>%
+  filter(Coefficient != 0)
+# Plot non-zero coefficients
+ggplot(lasso_df, aes(x = Coefficient, y = reorder(Variable, Coefficient), fill = Coefficient > 0)) +
+  geom_bar(stat = "identity", color = "black", width = 0.6) +  # Make bars narrower
+  scale_fill_manual(
+    values = c("TRUE" = "#2CA25F", "FALSE" = "#DE2D26"),
+    name = "Sign of Coefficient",  # Legend for TRUE and FALSE
+    labels = c("Positive", "Negative")  # Define legend labels
+  ) +
+  scale_x_continuous(labels = scales::comma, expand = c(0, 0)) +  # Format x-axis as numbers with commas
+  labs(
+    title = "Lasso Regression: Non-Zero Coefficients",
+    x = "Coefficient Value",
+    y = "Predictors"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.5, margin = margin(b = 4)),  # Shrink title further
+    axis.text.x = element_text(size = 6),  # Make x-axis text smaller
+    axis.text.y = element_text(size = 5, margin = margin(r = 2)),  # Y-axis text smaller and closer
+    axis.title.x = element_text(size = 8, face = "bold"),
+    axis.title.y = element_text(size = 8, face = "bold"),
+    legend.position = "right",  # Keep legend on the right
+    legend.title = element_text(size = 6, face = "bold"),  # Smaller legend title
+    legend.text = element_text(size = 5),  # Smaller legend text
+    plot.margin = margin(t = 3, r = 3, b = 3, l = 3)  # Minimized plot margins
+  ) +
+  coord_cartesian(clip = "off")  # Ensure no clipping occurs
+# Fit the OLS model
+ols_model <- lm(INCWAGE ~ CITIZEN + EDUCD, data = unskilled_imgra)
+# Display the OLS model output
+summary(ols_model)
+```
